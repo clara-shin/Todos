@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>TODOList</title>
+    <link href="https://fonts.googleapis.com/css?family=Roboto+Condensed" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <button class="login">로그인</button>
+    <span class="displayName">(구글인증안됨)</span>
+
+    <div class="todo-list-box">
+      <h1>TODOS</h1>
+      <p class="input-group">
+        <input type="text" class="todo-input">
+        <button type="button" class="add-button">ADD</button>
+      </p>
+      <div class="todo-list"></div>
+
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/4.8.1/firebase.js"></script>
+    <script>
+      // Initialize Firebase
+      var config = {
+        apiKey: "AIzaSyDjkhHqFNDOqljbPT2a7Dn_09M4Wq5ov18",
+        authDomain: "fds-firebase-todo-example.firebaseapp.com",
+        databaseURL: "https://fds-firebase-todo-example.firebaseio.com",
+        projectId: "fds-firebase-todo-example",
+        storageBucket: "",
+        messagingSenderId: "19039839821"
+      };
+      firebase.initializeApp(config);
+    </script>
+    <script>
+    var provider = new firebase.auth.GoogleAuthProvider();
+    document.querySelector('.login').addEventListener('click', async e => {
+      let result = await firebase.auth().signInWithPopup(provider);
+
+      // This gives you a Google Access Token. You can use it to access the Google API.
+      var token = result.credential.accessToken;
+      // The signed-in user info.
+      var user = result.user;
+      // ...
+      console.log(token);
+      console.log(user);
+      document.querySelector('.login').classList.add('hidden');
+      let displayName = document.querySelector('.displayName');
+      displayName.textContent = user.displayName + '님 로그인 성공!';
+
+    });
+
+
+    const inputEl = document.querySelector('.todo-input');
+    const addEl= document.querySelector('.add-button');
+
+    inputEl.addEventListener('keypress', async e => {
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        const listEl = document.querySelector('.todo-list');
+
+        listEl.classList.add('todo-list--loading');
+        const uid = firebase.auth().currentUser.uid; //식별자
+        await firebase.database().ref(`users/${uid}/todos`).push({ //firebase에 요청 후 "잘 응답 온 후" 데이터를 가져와야 함
+          title: e.currentTarget.value, //div => e.currentTarget.textContent
+          complete: false
+        });
+        inputEl.value = '';
+        //화면 다시 그려주기
+        refreshTodos();
+
+      }
+    })
+      addEl.addEventListener('click', async e => {
+        e.preventDefault();
+        const listEl = document.querySelector('.todo-list');
+
+        listEl.classList.add('todo-list--loading');
+        const uid = firebase.auth().currentUser.uid; //식별자
+        await firebase.database().ref(`users/${uid}/todos`).push({ //firebase에 요청 후 "잘 응답 온 후" 데이터를 가져와야 함
+          title: inputEl.value, //div => e.currentTarget.textContent
+          complete: false
+        });
+        inputEl.value = '';
+        refreshTodos();
+      })
+    //화면을 그리는 부분 전부담당하는 함수
+    async function refreshTodos() {
+      const uid = firebase.auth().currentUser.uid;//로그인되었다고 가정
+      const snapshot = await firebase.database().ref(`/users/${uid}/todos`).once('value'); //객체
+      const todos = snapshot.val();
+      console.log(todos);
+      //push 역시 promise를 반환
+      //객체를 순환한다. Object.entries()
+      const listEl = document.querySelector('.todo-list');
+      listEl.innerHTML = '';
+
+      for(let [todoId,todo] of Object.entries(todos)){ //분해대입
+        //console.log(todoId);
+        //console.log(todo);
+        const todoEl = document.createElement('div');
+        //삭제버튼
+        const deleteEl = document.createElement('button');
+        deleteEl.className = 'delete';
+        deleteEl.textContent = 'X';
+
+        todoEl.textContent = todo.title;
+        todoEl.appendChild(deleteEl);
+
+        deleteEl.addEventListener('click', async e => {
+          e.stopPropagation();
+          await firebase.database().ref(`/users/${uid}/todos/${todoId}`).remove();
+          //다시 그려주기
+          refreshTodos();
+        })
+
+        todoEl.addEventListener('click', async e => {
+          // complete를 바꿔서 데이터베이스 업데이트
+
+          //DB 처리
+          todo.complete = !todo.complete;
+          await firebase.database().ref(`/users/${uid}/todos/${todoId}`).update({
+            complete: todo.complete
+          })
+          inputEl.value = '';
+          //다시그려주기
+          refreshTodos();
+        })
+
+       //view 처리 및 반영
+        if (todo.complete) {
+          todoEl.classList.add('bggold');
+        } else {
+          todoEl.classList.remove('bggold');
+        }
+
+
+        listEl.appendChild(todoEl);
+      }
+
+
+
+      listEl.classList.remove('todo-list--loading');
+    }
+
+    //인증 상태 변경 관찰자 설정 및 사용자 데이터 가져오기
+    firebase.auth().onAuthStateChanged(function (user) {
+        if (user) {
+          // User is signed in.
+          refreshTodos();
+        } else {
+          // User is signed out.
+          // ...
+        }
+      });
+
+
+    </script>
+
+</body>
+</html>
